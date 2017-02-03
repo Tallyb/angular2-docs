@@ -4,19 +4,21 @@ order: 2
 ---
 <h2 id="installation">Installation</h2>
 
-To get started with Apollo and Angular, install the `apollo-client` npm package, the `apollo-angular` integration package, and the `graphql-tag` library for constructing query documents:
+Install the `apollo-client` npm package, the `apollo-angular` integration package, and the `graphql-tag` library for constructing query documents:
 
 ```bash
 npm install apollo-client apollo-angular graphql-tag --save
 ```
 
-If you are in an environment that does not have a global [`fetch`](https://developer.mozilla.org/en-US/docs/Web/API/GlobalFetch/fetch) implementation, make sure to install a polyfill like [`whatwg-fetch`](https://www.npmjs.com/package/whatwg-fetch).
+> If you are in an environment that does not have a global [`fetch`](https://developer.mozilla.org/en-US/docs/Web/API/GlobalFetch/fetch) > implementation, make sure to install a polyfill like [`whatwg-fetch`](https://www.npmjs.com/package/whatwg-fetch).
 
 <h2 id="initialization">Initialization</h2>
 
-To get started using Apollo, we need to create an `ApolloClient` and use `ApolloModule`. `ApolloClient` serves as a central store of query result data which caches and distributes the results of our queries. `ApolloModule` wires that client into your application.
+Add Angular Apollo into your project by creating an `ApolloClient` and use `ApolloModule`. `ApolloClient` serves as a central store of query result data which caches and distributes the results of our queries. `ApolloModule` wires that client into your application.
 
-<h3 id="creating-client">Creating a client</h3>
+Angular Apollo client can be created as a simple object or as a class. Creating a class allows to use other providers, such as configuration service for the url. 
+
+<h3 id="creating-object-client">Creating an object client</h3>
 
 To get started, create an [`ApolloClient`](/core/apollo-client-api.html#constructor) instance and point it at your GraphQL server:
 
@@ -38,17 +40,16 @@ const client = new ApolloClient({
     uri: 'http://my-api.grapql.com'
   }),
 });
+
+export function getClient(): ApolloClient {
+  return client;
+}
 ```
 
 The other options control the behavior of the client, and we'll see examples of their use throughout this guide.
 
-<h3 id="bootstrap">Bootstrap</h3>
-
-**Angular Modules**, also known as **NgModules**, are the powerful new way to organize and bootstrap your Angular application.
-
-<h3 id="providing-apollomodule">Providing ApolloModule</h3>
-
-To connect your client instance to your app, use the `ApolloModule.forRoot`.
+Use the ApolloModule `forRoot` method to provide the client object. 
+In the `app.module.ts`: 
 
 ```ts
 import { ApolloClient } from 'apollo-client';
@@ -59,18 +60,12 @@ import { BrowserModule  } from '@angular/platform-browser';
 import { platformBrowserDynamic } from '@angular/platform-browser-dynamic';
 
 import { AppComponent } from './app.component';
-
-// Create the client as outlined above
-const client = new ApolloClient();
-
-export function provideClient(): ApolloClient {
-  return client;
-}
+import { getClient } from './client';
 
 @NgModule({
   imports: [
     BrowserModule,
-    ApolloModule.forRoot(provideClient)
+    ApolloModule.forRoot(getClient)
   ],
   declarations: [ AppComponent ],
   bootstrap: [ AppComponent ]
@@ -81,6 +76,78 @@ platformBrowserDynamic().bootstrapModule(AppModule);
 ```
 
 > There is still `ApolloModule.withClient` available but we recommend you to use `ApolloModule.forRoot` instead.
+
+<h3 id="creating-class-client">Creating a class client</h3>
+
+Create a client Injectable provider. You can use services in the provider. 
+This re-exports an ApolloModule with the class client. 
+```ts
+import { ApolloClient, createNetworkInterface } from 'apollo-client';
+import { Injectable, NgModule } from '@angular/core';
+import { Apollo, ApolloModule, APOLLO_DIRECTIVES } from 'apollo-angular';
+import { ConfigService } from './config.service'; //Any configuration service(s)
+
+@Injectable()
+export class Client {
+  public client: ApolloClient;
+  private networkInterface: any;
+
+  constructor(private config: ConfigService) { //inject configuration service
+    this.networkInterface = createNetworkInterface({
+      uri: this.config.getGraphQLUrl(),
+      opts: {
+        credentials: 'same-origin',
+      },
+    });
+   
+    this.client = new ApolloClient({
+      networkInterface: this.networkInterface
+    });
+  }
+}
+
+export function ApolloFactory(client: Client) {
+  return new Apollo({ 'default': client.client });
+}
+
+@NgModule({
+  providers: [Client, {
+    provide: ApolloModule,
+    useFactory: ApolloFactory,
+    deps: [Client]
+  }]
+})
+
+export class ConfiguredApolloModule { }
+```
+Then in the `app.module.ts`: 
+```ts
+import { BrowserModule } from '@angular/platform-browser';
+import { NgModule } from '@angular/core';
+import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { ApolloModule } from 'apollo-angular';
+
+import { ConfigService } from './config.service';
+import { AppComponent } from './app.component';
+import { ConfiguredApolloModule } from './client';
+
+@NgModule({
+  declarations: [
+    AppComponent,
+  ],
+  providers: [ConfigService],
+  imports: [
+    BrowserModule,
+    FormsModule,
+    ReactiveFormsModule,
+    // Define the revised ApolloClient
+    ConfiguredApolloModule,
+  ],
+  bootstrap: [AppComponent],
+})
+export class AppModule { }
+```
+
 
 <!--  Add content here once it exists -->
 <!-- ## Troubleshooting -->
